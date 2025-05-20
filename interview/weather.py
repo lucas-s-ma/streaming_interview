@@ -1,19 +1,19 @@
 from typing import Any, Iterable, Generator, Dict
 
-
 def process_events(events: Iterable[dict[str, Any]]) -> Generator[dict[str, Any], None, None]:
     stations: Dict[str, Dict[str, float]] = {}
-    latest_timestamp = None
+    latest_timestamp = 0
 
     for line in events:
-        type = line['type']
-        if type == 'sample':
+        msg_type = line.get('type')
+
+        if msg_type == 'sample':
             try:
                 station_name = line['stationName']
                 timestamp = line['timestamp']
                 temperature = line['temperature']
             except KeyError as e:
-                raise ValueError(f"Missing key in the sample message: {e}")
+                raise ValueError(f"Missing key in the sample message: {e}") from e
 
             if station_name not in stations:
                 stations[station_name] = {'min': temperature, 'max': temperature}
@@ -23,18 +23,19 @@ def process_events(events: Iterable[dict[str, Any]]) -> Generator[dict[str, Any]
 
             latest_timestamp = timestamp
 
-        elif type == 'control':
+        elif msg_type == 'control':
             try:
                 command = line['command']
             except KeyError:
-                raise ValueError("Control message missing 'command' key")
+                raise ValueError("Control message missing 'command' key") from e
 
             if command == 'snapshot':
-                if latest_timestamp is None:
-                    continue  
+                if latest_timestamp == 0:
+                    continue
 
                 stations_output = {
-                    name: {'high': data['max'], 'low': data['min']} for name, data in stations.items()
+                    name: {'high': data['max'], 'low': data['min']}
+                    for name, data in stations.items()
                 }
                 yield {
                     'type': 'snapshot',
@@ -43,8 +44,8 @@ def process_events(events: Iterable[dict[str, Any]]) -> Generator[dict[str, Any]
                 }
 
             elif command == 'reset':
-                if latest_timestamp is None:
-                    continue  
+                if latest_timestamp == 0:
+                    continue
 
                 yield {
                     'type': 'reset',
@@ -52,10 +53,10 @@ def process_events(events: Iterable[dict[str, Any]]) -> Generator[dict[str, Any]
                 }
 
                 stations.clear()
-                latest_timestamp = None
+                latest_timestamp = 0
 
             else:
                 raise ValueError(f"Unknown control command: {command}")
 
         else:
-            raise ValueError(f"Unknown message type: {type}")
+            raise ValueError(f"Unknown message type: {msg_type}")
